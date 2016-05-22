@@ -22,25 +22,35 @@ class Circle2D[T[_] : Point2DInterface, U : Numeric] (val center: T[U], val radi
 object Circle2D {
 
   private def from3Points[T[_]: Point2DInterface, U: Numeric](p1: T[U], p2: T[U], p3: T[U]): (T[U], U) = {
-    val m1 = Edge2D(p1, p2).slope
-    val m2 = Edge2D(p2, p3).slope
-    val x1 = p1.x.toDouble()
-    val x2 = p2.x.toDouble()
-    val x3 = p3.x.toDouble()
-    val y1 = p1.y.toDouble()
-    val y2 = p2.y.toDouble()
-    val y3 = p3.y.toDouble()
-    val x_center = (m1 * m2 * (y3 - y1) + m1 * (x2 + x3) - m2 * (x1 + x2)) / (2 * (m1 - m2))
-    // TODO newInterfacePoint2D.apply[T, Double]() without 'apply[T, Double]'
-    val (slope_z, median_z) = if (m1 == 0) (m2, newInterfacePoint2D((x2 + x3) / 2.0, (y2 + y3) / 2.0))
-                              else (m1, newInterfacePoint2D((x1 + x2) / 2.0, (y1 + y2) / 2.0))
-    if (slope_z == 0) throw new Exception("Three horizontal points cannot construct a circle! points=" + p1 + "|" + p2 + "|" + p3)
+    def inner(p1: T[U], p2: T[U], p3: T[U]) = {
+      val m1 = Edge2D(p1, p2).slope
+      val m2 = Edge2D(p2, p3).slope
+      val x1 = p1.x.toDouble()
+      val x2 = p2.x.toDouble()
+      val x3 = p3.x.toDouble()
+      val y1 = p1.y.toDouble()
+      val y2 = p2.y.toDouble()
+      val y3 = p3.y.toDouble()
+      val x_center = (m1 * m2 * (y3 - y1) + m1 * (x2 + x3) - m2 * (x1 + x2)) / (2 * (m1 - m2))
+      // TODO newInterfacePoint2D.apply[T, Double]() without 'apply[T, Double]'
+      val (slope_z, median_z) = if (m1 == 0) (m2, newInterfacePoint2D((x2 + x3) / 2.0, (y2 + y3) / 2.0))
+                                else (m1, newInterfacePoint2D((x1 + x2) / 2.0, (y1 + y2) / 2.0))
+      if (slope_z == 0) {
+        throw new Exception("Three perpendicular points cannot construct circle -> " + p1 + "," + p2 + "," + p3)
+      }
 
-    val perpemdicularLine = Line2D(median_z, -1.0 / slope_z)
-    val y_center = perpemdicularLine.getY(x_center)
-    val center = newInterfacePoint2D(x_center, y_center)
-    val radius = center - p1.toDouble2D()
-    (center.asInstanceOf[T[U]], radius.asInstanceOf[U])
+      val perpemdicularLine = Line2D(median_z, -1.0 / slope_z)
+      val y_center = perpemdicularLine.getY(x_center)
+      val center = newInterfacePoint2D(x_center, y_center)
+      val radius = center - p1.toDouble2D()
+      (center.asInstanceOf[T[U]], radius.asInstanceOf[U])
+    }
+    if (p1.x != p2.x && p2.x != p3.x) inner(p1, p2, p3)
+    else if (p1.x == p2.x && p2.x != p3.x) inner(p1, p3, p2)
+    else if (p2.x == p3.x && p1.x != p2.x) inner(p2, p1, p3)
+    else {
+      throw new Exception("Three perpendicular points cannot construct circle -> " + p1 + "," + p2 + "," + p3)
+    }
   }
 
   def apply[T[_]: Point2DInterface, U: Numeric](p1: T[U], p2: T[U], p3: T[U]) = {

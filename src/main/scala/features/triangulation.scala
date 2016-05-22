@@ -1,5 +1,7 @@
 package features
 
+import sorting.Point2D.Right
+
 import scala.math._
 import scala.Numeric.Implicits._
 import scala.Ordering.Implicits._
@@ -30,23 +32,15 @@ object triangulation {
       def apply() = new TrianglesMap()(new sorting.Point2D.Low())
     }
 
-    def leftPoint(p1: Point, p2: Point) = p1.x < p2.x
-    def rightPoint(p1: Point, p2: Point) = p1.x > p2.x
-
     def TrianglesMapWithValue(point: Point, trianglesSeq: Seq[Triangle]) = {
       TrianglesMap().insert(point, trianglesSeq)
     }
 
     def trianglesMapBase(trianglesMap: TrianglesMap) = trianglesMap.head._1
-    def trianglesMapCandidates(trianglesMap: TrianglesMap) = trianglesMap.values.head.flatMap(_.points).toSet
+    def trianglesMapCandidates(trianglesMap: TrianglesMap) = trianglesMap.values.head.flatMap(_.points)
 
     def pointsSeqBase(pointsSeq: PointsSeq) = pointsSeq.head
-    def pointsSeqCandidates(pointsSeq: PointsSeq) = pointsSeq.tail.toSet
-
-//    val leftOrdering = new sorting.Point2D.Left[T,U]()
-//    val rightOrdering = new sorting.Point2D.Right[T,U]()
-//    val leftLowOrdering = new sorting.Point2D.LowPlusSide[T, U](leftOrdering)
-//    val rightLowOrdering = new sorting.Point2D.LowPlusSide[T, U](rightOrdering)
+    def pointsSeqCandidates(pointsSeq: PointsSeq) = pointsSeq.tail
 
     def divideToSubsets(points: PointsSeq, n: Int): PointsDoubleSeq = {
       if (points.length <= n) Seq(points)
@@ -84,14 +78,12 @@ object triangulation {
       }
 
       def subSetsRecursive(leftPoints: PointsSeq, rightPoints: PointsSeq): TrianglesMap = {
-        val leftSet = leftPoints.sortWith((p1, p2) => {
+        val sort = (p1: Point, p2: Point) => {
           if (p1.y != p2.y) p1.y < p2.y
           else p1.x > p2.x
-        })
-        val rightSet = rightPoints.sortWith((p1, p2) => {
-          if (p1.y != p2.y) p1.y < p2.y
-          else p1.x < p2.x
-        })
+        }
+        val leftSet = leftPoints.sortWith(sort)
+        val rightSet = rightPoints.sortWith(sort)
         mergeContainers(leftSet, rightSet)(pointsSeqBase, pointsSeqCandidates)
       }
 
@@ -104,15 +96,21 @@ object triangulation {
 
     def mergeContainers[Container <: Iterable[_]](left: Container, right: Container)
                                          (getBase: Function[Container, Point],
-                                          getCandidates: Function1[Container, PointsSet]): TrianglesMap = {
+                                          getCandidates: Function1[Container, PointsSeq]): TrianglesMap = {
 
       val leftBasePoint = getBase(left)
       val rightBasePoint = getBase(right)
       val leftCandidates = getCandidates(left)
       val rightCandidates = getCandidates(right)
 
-      val leftCandidate = selectCandidate(leftCandidates, leftBasePoint, rightBasePoint)(rightPoint)
-      val rightCandidate = selectCandidate(rightCandidates, leftBasePoint, rightBasePoint)(leftPoint)
+      //def leftPoint(p1: Point, p2: Point) = p1.x < p2.x
+      //def rightPoint(p1: Point, p2: Point) = p1.x > p2.x
+
+      import sorting.Point2D.Left
+      import sorting.Point2D.Right
+
+      val leftCandidate = selectCandidate(leftCandidates, leftBasePoint, rightBasePoint)(new Right[T,U]())
+      val rightCandidate = selectCandidate(rightCandidates, leftBasePoint, rightBasePoint)(new Left[T,U]())
 
       val lowerBase = leftBasePoint lowerPoint rightBasePoint
 
@@ -124,8 +122,12 @@ object triangulation {
 
       def tailAsContainer(container: Container) = container.tail.asInstanceOf[Container]
       (leftCandidate, rightCandidate) match {
-        case (Some(lc), None) => recursiveCall(lc, tailAsContainer(left), right)
-        case (None, Some(rc)) => recursiveCall(rc, left, tailAsContainer(right))
+        case (Some(lc), None) => {
+          recursiveCall(lc, tailAsContainer(left), right)
+        }
+        case (None, Some(rc)) => {
+          recursiveCall(rc, left, tailAsContainer(right))
+        }
         case (Some(lc), Some(rc)) => {
           val leftCircle = Circle2D(lc, leftBasePoint, rightBasePoint)
           if (leftCircle.isInside(rc)) recursiveCall(rc, left, tailAsContainer(right))
@@ -141,19 +143,24 @@ object triangulation {
       val merged = first.toSeq ++ second.toSeq
       val grouped = merged.groupBy(_._1)
       val cleaned = grouped.mapValues(v1 => v1.flatMap(v2 => v2._2).distinct)
-      TrianglesMap() ++ cleaned
+      val r = TrianglesMap() ++ cleaned
+      r
     }
 
-    def selectCandidate(candidates: PointsSet, basePoint: Point, otherBasePoint: Point)(orientation: Function2[Point, Point, Boolean]) : Option[Point] = {
+    def selectCandidate(candidates: PointsSeq, basePoint: Point, otherBasePoint: Point)(ordering: Ordering[Point]) : Option[Point] = {
 
-      //val partialFiltered = candidates.filter(point => orientation(point, basePoint))
-      val filtered = candidates.filter(point => {
-        val circle = Circle2D(point, basePoint, otherBasePoint)
-        val isUnique = candidates.forall(!circle.isInside(_))
-        isUnique
+      import scala.collection.immutable.TreeSet
+      val sortedCandidates = TreeSet(candidates: _*)(ordering)
+      sortedCandidates.find(candidate => {
+        if (candidate == basePoint || candidate == otherBasePoint) false
+        else {
+          val circle = Circle2D(candidate, basePoint, otherBasePoint)
+          sortedCandidates.forall(point => {
+            if (candidate == point) true
+            else !circle.isInside(point)
+          })
+        }
       })
-      if (filtered.size > 1) throw new Exception("Two much candidates, amount=" + filtered.size)
-      Some(filtered.head)
     }
 
     triangulate(points)
