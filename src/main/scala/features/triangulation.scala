@@ -1,5 +1,6 @@
 package features
 
+import com.sun.javafx.geom.Edge
 import sorting.Point2D.Right
 
 import scala.math._
@@ -9,6 +10,7 @@ import scala.language.higherKinds
 
 import scala.collection.immutable.TreeMap
 
+import geometries.Edge2D
 import geometries.Triangle2D
 import geometries.Circle2D
 import geometries.Point2DInterface
@@ -70,10 +72,11 @@ object triangulation {
           val (leftSide, rightSide) = points.splitAt(points.length / 2)
           merge(leftSide, rightSide)
         }
+
         val leftTriangles = split(leftPoints)
         val rightTriangles = split(rightPoints)
-        val newTriangles = mergeContainers(leftTriangles, rightTriangles)(trianglesMapBase, trianglesMapCandidates)
         val leftAndRightTriangles = combineTrees(leftTriangles, rightTriangles)
+        val newTriangles = mergeContainers(leftTriangles, rightTriangles)(trianglesMapBase, trianglesMapCandidates)
         combineTrees(leftAndRightTriangles, newTriangles)
       }
 
@@ -98,13 +101,14 @@ object triangulation {
                                          (getBase: Function[Container, Point],
                                           getCandidates: Function1[Container, PointsSeq]): TrianglesMap = {
 
+      if (left.size == 0 || right.size == 0){
+        throw new Exception("Candidates equal to zero!")
+      }
+
       val leftBasePoint = getBase(left)
       val rightBasePoint = getBase(right)
-      val leftCandidates = getCandidates(left)
-      val rightCandidates = getCandidates(right)
-
-      //def leftPoint(p1: Point, p2: Point) = p1.x < p2.x
-      //def rightPoint(p1: Point, p2: Point) = p1.x > p2.x
+      val leftCandidates = if (left.size > 1) getCandidates(left) else List[Point]()
+      val rightCandidates = if (right.size > 1) getCandidates(right) else List[Point]()
 
       import sorting.Point2D.Left
       import sorting.Point2D.Right
@@ -140,25 +144,34 @@ object triangulation {
     }
 
     def combineTrees(first: TrianglesMap, second: TrianglesMap): TrianglesMap = {
-      val merged = first.toSeq ++ second.toSeq
-      val grouped = merged.groupBy(_._1)
-      val cleaned = grouped.mapValues(v1 => v1.flatMap(v2 => v2._2).distinct)
-      val r = TrianglesMap() ++ cleaned
-      r
+      first ++ second.map({
+        case (k,v) => {
+          k -> (v ++ first.getOrElse(k, Nil))
+        }
+      })
     }
 
     def selectCandidate(candidates: PointsSeq, basePoint: Point, otherBasePoint: Point)(ordering: Ordering[Point]) : Option[Point] = {
 
       import scala.collection.immutable.TreeSet
+
+      if (candidates.length == 0) {
+        return None
+      }
+
+      val lrEdge = Edge2D(basePoint, otherBasePoint)
       val sortedCandidates = TreeSet(candidates: _*)(ordering)
       sortedCandidates.find(candidate => {
         if (candidate == basePoint || candidate == otherBasePoint) false
         else {
-          val circle = Circle2D(candidate, basePoint, otherBasePoint)
-          sortedCandidates.forall(point => {
-            if (candidate == point) true
-            else !circle.isInside(point)
-          })
+          if (lrEdge.relativePosition(candidate) < 0) false
+          else {
+            val circle = Circle2D(candidate, basePoint, otherBasePoint)
+            sortedCandidates.forall(point => {
+              if (candidate == point) true
+              else !circle.isInside(point)
+            })
+          }
         }
       })
     }
