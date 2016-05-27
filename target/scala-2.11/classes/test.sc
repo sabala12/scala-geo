@@ -1,32 +1,34 @@
-//import scala.collection.immutable.TreeMap
-//// convert maps to seq, to keep duplicate keys and concat
-//val a = TreeMap(1 -> List(2,4), 2 -> List(0,10))
-//val b = TreeMap(1 -> List(2,5), 2 -> List(1,3))
-//
-////val merged = a.toSeq ++ b.toSeq
-//val merged = a.toSeq ++ b.toSeq
-//// merged: Seq[(Int, Int)] = ArrayBuffer((1,2), (1,4))
-//
-//// group by key
-//val grouped = merged.groupBy(_._1)
-//// grouped: scala.collection.immutable.Map[Int,Seq[(Int, Int)]] = Map(1 -> ArrayBuffer((1,2), (1,4)))
-//
-//// remove key from value set and convert to list
-//val cleaned = grouped.mapValues(v1 => {
-//  v1.flatMap(v2 => {
-//    v2._2
-//  }).distinct
-//})
-//
-//val findal = TreeMap(cleaned.toArray:_*)
-import sorting.Point2D._
+import scala.collection.immutable.TreeMap
+import geometries.Triangle2D
 import geometries.Point2D
+import geometries.Point2D._
 import geometries.Point2DInterface
 import geometries.Point2DImplicits._
-val low = new Low[Point2D, Double]()
-val left = new Left[Point2D, Double]()
-val up = new High[Point2D, Double]()
-val right = new Right[Point2D, Double]()
-val a = Point2D(1.0, 1.0)
-val b = Point2D(2.0, 2.0)
-up.compare(a,b)
+
+import scala.math.{Ordering, Numeric}
+
+
+implicit object ordering extends Ordering[Point2D[Double]] {
+  def compare(p1: Point2D[Double], p2: Point2D[Double]): Int = {
+    if (p1.x != p2.x) (p1.x - p2.x).toInt
+    else (p1.y - p2.y).toInt
+  }
+}
+
+// convert maps to seq, to keep duplicate keys and concat
+val a_k1 = Point2D(3.0,3.0)
+val a_t1 = Triangle2D(Point2D(2.0,6.0), Point2D(1.0,4.0), Point2D(3.0,3.0))
+val a_k2 = Point2D(3.0,1.0)
+val a_t2 = Triangle2D(Point2D(1.0,4.0), Point2D(2.0,1.0), Point2D(3.0,3.0))
+val a = TreeMap(a_k1 -> List(a_t1), a_k2 -> List(a_t2))
+val b_k1 = Point2D(6.0,3.0)
+val b_t1 = Triangle2D(Point2D(7.0,9.0), Point2D(5.0,6.0), Point2D(6.0,3.0))
+val b_k2 = Point2D(3.0,3.0)
+val b_t2 = Triangle2D(Point2D(5.0,6.0), Point2D(5.0,1.0), Point2D(6.0,3.0))
+val b_t3 = Triangle2D(Point2D(6.0,3.0), Point2D(5.0,1.0), Point2D(9.0,2.0))
+val b = TreeMap(a_k1 -> List(b_t1), a_k2 -> List(b_t2, b_t3))
+val r = a ++ b.map({
+  case (k,v) => {
+    k -> (v ++ a.getOrElse(k, Nil))
+  }
+})

@@ -9,6 +9,13 @@ import geometries.Point2DImplicits.Point2DInterfaceOps
 
 object Point2D {
 
+  class Order[T[_] : Point2DInterface, U: Numeric] extends Ordering[T[U]] {
+    def compare(p1: T[U], p2: T[U]): Int = {
+      if (p1.y != p2.y) (p1.y - p2.y).toInt()
+      else (p1.x - p2.x).toInt()
+    }
+  }
+
   class High[T[_] : Point2DInterface, U: Numeric] extends Ordering[T[U]] {
     def compare(p1: T[U], p2: T[U]): Int = (p1.y - p2.y).toInt()
   }
