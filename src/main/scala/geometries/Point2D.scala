@@ -32,7 +32,7 @@ class Point2D[U : Numeric] (val x: U, val y: U) {
     new Point2D(numeric.toFloat(x), numeric.toFloat(y))
   }
 
-  override lazy val toString: String = x + "," + y
+  override lazy val toString: String = x.toString + "," + y.toString
 
   override def equals(obj: Any): Boolean = obj match {
     case that: Point2D[_] => that.x.equals(x) && that.y.equals(y)

@@ -9,7 +9,7 @@ import Point2DImplicits.Point2DInterfaceOps
 class Edge2D[T[_] : Point2DInterface, U : Numeric] (val p1: T[U], val p2: T[U]) {
 
   def this() {
-    this(newInterfacePoint2D(), newInterfacePoint2D())
+    this(newInterfacePoint2D[T, U](), newInterfacePoint2D[T, U]())
   }
 
   def length = p1 - p2
@@ -22,7 +22,7 @@ class Edge2D[T[_] : Point2DInterface, U : Numeric] (val p1: T[U], val p2: T[U]) 
   lazy val b: Double = p1_y_double - (p1_x_double * slope)
 
   lazy val slope: Double = {
-    require(p1.x != p2.x, p1.x + "==" + p2.x + "->x1==x2 not allowed!")
+    require(p1.x != p2.x, p1.x.toString + "==" + p2.x.toString + "->x1==x2 not allowed!")
     (p1_y_double - p2_y_double) / (p1_x_double - p2_x_double)
   }
 

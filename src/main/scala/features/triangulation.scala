@@ -35,11 +35,6 @@ object triangulation {
       TrianglesMap().insert(point, trianglesSeq)
     }
 
-    def trianglesMapBase(trianglesMap: TrianglesMap) = {
-      if (trianglesMap.nonEmpty) (trianglesMap.head._1, trianglesMap.values.head.flatMap(_.points))
-      else throw new Exception("Empty TrianglesMap!")
-    }
-
     def pointsSeqBase(pointsSeq: PointsSeq) = {
       if (pointsSeq.size > 1) (pointsSeq.head, pointsSeq.tail)
       else if (pointsSeq.nonEmpty) (pointsSeq.head, List[Point]())
@@ -77,7 +72,7 @@ object triangulation {
 
         val leftTriangles = split(leftPoints)
         val rightTriangles = split(rightPoints)
-        val newTriangles = mergeContainers(leftTriangles, rightTriangles)(trianglesMapBase)
+        val newTriangles = mergeTrees(leftTriangles, rightTriangles)
         val leftAndRightTriangles = combineTrees(leftTriangles, rightTriangles)
         combineTrees(leftAndRightTriangles, newTriangles)
       }
@@ -89,7 +84,7 @@ object triangulation {
         }
         val leftSet = leftPoints.sortWith(sort)
         val rightSet = rightPoints.sortWith(sort)
-        mergeContainers(leftSet, rightSet)(pointsSeqBase)
+        mergeSegments(leftSet, rightSet)
       }
 
       (left, right) match {
@@ -99,38 +94,35 @@ object triangulation {
       }
     }
 
-    def mergeContainers[Container <: Iterable[_]](left: Container, right: Container)
-                                         (getBase: Function[Container, (Point, PointsSeq)]): TrianglesMap = {
+    def mergeSegments(left: PointsSeq, right: PointsSeq): TrianglesMap = {
 
-      val (leftBasePoint, leftCandidates) = getBase(left)
-      val (rightBasePoint, rightCandidates) = getBase(right)
+      def findCandidate(base: Point, otherBase: Point, candidates: PointsSeq): Option[Point] = {
+        //TODO calc min angle: Ordering
+        for (candidate <- candidates) {
+          val circle = Circle2D(candidate, base, otherBase)
+          if (candidates.forall(!circle.isInside(_))) return Some(candidate)
+        }
+        None
+      }
+      val leftBase = left.head
+      val rightBase = right.head
+      val leftCandidate = findCandidate(leftBase, rightBase, left.tail)
+      val rightCandidate = findCandidate(rightBase, leftBase, right.tail)
+      val lowerBase = leftBase lowerPoint rightBase
 
-      import sorting.Point2D.Left
-      import sorting.Point2D.Right
-
-      val leftCandidate = selectCandidate(leftCandidates, leftBasePoint, rightBasePoint)(new Right[T,U]())
-      val rightCandidate = selectCandidate(rightCandidates, leftBasePoint, rightBasePoint)(new Left[T,U]())
-
-      val lowerBase = leftBasePoint lowerPoint rightBasePoint
-
-      def recursiveCall(newPoint: Point, subLeft: Container, subRight: Container): TrianglesMap = {
-        val newTriangle = Triangle2D(newPoint, leftBasePoint, rightBasePoint)
-        val trianglesMap = TrianglesMapWithValue(lowerBase, Seq(newTriangle))
-        combineTrees(trianglesMap, mergeContainers(subLeft, subRight)(getBase))
+      def recursiveCall(first: PointsSeq, second: PointsSeq, candidate: Point): TrianglesMap = {
+        val newTriangle = Triangle2D(leftBase, rightBase, candidate)
+        val newTriangleMap = TrianglesMapWithValue(lowerBase, Seq(newTriangle))
+        combineTrees(mergeSegments(first.tail, second), newTriangleMap)
       }
 
-      def containerTail(container: Container) = container.tail.asInstanceOf[Container]
       (leftCandidate, rightCandidate) match {
-        case (Some(lc), None) => {
-          recursiveCall(lc, containerTail(left), right)
-        }
-        case (None, Some(rc)) => {
-          recursiveCall(rc, left, containerTail(right))
-        }
+        case (Some(lc), None) => recursiveCall(left, right, lc)
+        case (None, Some(rc)) => recursiveCall(right, left, rc)
         case (Some(lc), Some(rc)) => {
-          val leftCircle = Circle2D(lc, leftBasePoint, rightBasePoint)
-          if (leftCircle.isInside(rc)) recursiveCall(rc, left, containerTail(right))
-          else recursiveCall(lc, containerTail(left), right)
+          val leftCircle = Circle2D(leftBase, rightBase, lc)
+          if (leftCircle.isInside(rc)) recursiveCall(right, left, lc)
+          else recursiveCall(right, left, rc)
         }
         case (None, None) => {
           TrianglesMap()
@@ -138,33 +130,63 @@ object triangulation {
       }
     }
 
+    def mergeTrees(left: TrianglesMap, right: TrianglesMap): TrianglesMap = {
+
+      val leftKey = left.head._1
+      val rightKey = right.head._1
+
+      val l = recalculateTree(left, right.head._1)
+      val r = recalculateTree(right, left.head._1)
+
+      def recursiveCall(first: TrianglesMap, second: TrianglesMap): TrianglesMap = {
+        combineTrees(mergeTrees(first.tail, second), first)
+      }
+
+      (l, r) match {
+        case (Some((lc, lt)), None) => {
+          recursiveCall(lt, right)
+        }
+        case (None, Some((rc, rt))) => {
+          recursiveCall(rt, left)
+        }
+        case (Some((lc, lt)), Some((rc, rt))) => {
+          val leftCircle = Circle2D(leftKey, rightKey, lc)
+          if (leftCircle.isInside(rc)) recursiveCall(lt, right)
+          else recursiveCall(rt, left)
+        }
+        case (None, None) => {
+          TrianglesMap()
+        }
+      }
+    }
+
+    def recalculateTree(first: TrianglesMap, otherBase: Point): Option[(Point, TrianglesMap)] = {
+
+      def getCandidate(triangle: Triangle, base: Point, nextBase: Point) = {
+        triangle.points
+          .filter(_ != base)
+          //TODO calc min angle: Ordering
+        triangle.points.head
+      }
+
+      var triangles = first.head._2
+      if (triangles.isEmpty) return None
+
+      val base = first.head._1
+
+      val candidates = triangles.map(getCandidate(_, base, otherBase))
+      for (candidate <- candidates) {
+        val circle = Circle2D(candidate, base, otherBase)
+        if (!candidates.forall(!circle.isInside(_))) triangles = triangles.tail
+        else return Some(candidate, first.tail.insert(base, triangles))
+      }
+      None
+    }
+
     def combineTrees(first: TrianglesMap, second: TrianglesMap): TrianglesMap = {
       first ++ second.map({
         case (k,v) => {
           k -> (v ++ first.getOrElse(k, Nil))
-        }
-      })
-    }
-
-    def selectCandidate(candidates: PointsSeq, basePoint: Point, otherBasePoint: Point)(ordering: Ordering[Point]) : Option[Point] = {
-
-      import scala.collection.immutable.TreeSet
-
-      if (candidates.isEmpty) return None
-
-      val lrEdge = Edge2D(basePoint, otherBasePoint)
-      val sortedCandidates = TreeSet(candidates: _*)(ordering)
-      sortedCandidates.find(candidate => {
-        if (candidate == basePoint || candidate == otherBasePoint) false
-        else {
-          if (lrEdge.relativePosition(candidate) < 0) return None
-          else {
-            val circle = Circle2D(candidate, basePoint, otherBasePoint)
-            sortedCandidates.forall(point => {
-              if (candidate == point) true
-              else !circle.isInside(point)
-            })
-          }
         }
       })
     }
